@@ -1,9 +1,11 @@
 import crypto from 'node:crypto';
 import express from 'express';
 import { cacheNamespace } from './semantic.js';
+import { CircuitBreaker } from './circuit-breaker.js';
 
 export function createApp({ store, provider = localProvider, rateLimit = Number(process.env.DEMO_RATE_LIMIT ?? 60) }) {
   const app = express();
+  const breaker = new CircuitBreaker();
   const metrics = { cache_hit: 0, cache_miss: 0, rate_limited: 0 };
   app.use(express.json({ limit: '100kb' }));
   app.use((req, res, next) => {
@@ -11,14 +13,32 @@ export function createApp({ store, provider = localProvider, rateLimit = Number(
     next();
   });
 
-  app.get('/health', async (_req, res) => {
-    try {
-      await store.client.ping();
-      res.json({ status: 'ok', dependencies: { redis: 'ok' } });
-    } catch {
-      res.status(503).json({ status: 'degraded', dependencies: { redis: 'unavailable' } });
-    }
-  });
+ app.get('/health', async (_req, res) => {
+  try {
+    await store.client.ping();
+
+    res.json({
+      status: 'ok',
+      dependencies: {
+        redis: 'ok'
+      },
+      provider: {
+        state: breaker.getState()
+      }
+    });
+
+  } catch {
+    res.status(503).json({
+      status: 'degraded',
+      dependencies: {
+        redis: 'unavailable'
+      },
+      provider: {
+        state: breaker.getState()
+      }
+    });
+  }
+});
 
   app.get('/metrics', (_req, res) => {
     res.type('text/plain').send(Object.entries(metrics).map(([name, value]) => `aegis_requests_total{outcome="${name}"} ${value}`).join('\n'));
@@ -44,7 +64,21 @@ export function createApp({ store, provider = localProvider, rateLimit = Number(
         metrics.cache_hit += 1;
         return res.set('X-Cache', 'HIT').json(response(model, cached, true));
       }
-      const content = await provider({ model, messages, temperature });
+      if (!breaker.canRequest()) {
+  return res.status(503).json({
+    error: { message: 'Provider temporarily unavailable' }
+  });
+}
+
+let content;
+
+try {
+  content = await provider({ model, messages, temperature });
+  breaker.recordSuccess();
+} catch (error) {
+  breaker.recordFailure();
+  throw error;
+} 
       await store.putSemantic(scope, prompt, content);
       metrics.cache_miss += 1;
       return res.set('X-Cache', 'MISS').json(response(model, content, false));
