@@ -2,10 +2,6 @@
 
 A Node.js, Express, and Redis gateway for LLM APIs. It adds the backend systems work that turns a model endpoint into a product: tenant quotas, semantic caching, operational health, and a clean provider boundary.
 
-## Resume alignment
-
-This project intentionally builds on your existing skills: **JavaScript, Node.js, Express.js, REST APIs, Docker, microservices, databases, and backend performance**. Redis is a natural, credible next step because it handles both low-latency cache data and distributed rate-limit coordination.
-
 ## Architecture
 
 ```text
