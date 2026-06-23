@@ -37,10 +37,21 @@ docker compose up --build
 
 Then send a request:
 
+**macOS / Linux**
+
 ```bash
 curl -X POST http://localhost:8000/v1/chat/completions \
   -H "Content-Type: application/json" \
   -H "X-API-Key: demo-key" \
+  -d '{"model":"local-demo","messages":[{"role":"user","content":"Explain semantic caching in one sentence."}]}'
+```
+
+**Windows PowerShell**
+
+```powershell
+curl.exe -X POST "http://localhost:8000/v1/chat/completions" `
+  -H "Content-Type: application/json" `
+  -H "X-API-Key: demo-key" `
   -d '{"model":"local-demo","messages":[{"role":"user","content":"Explain semantic caching in one sentence."}]}'
 ```
 
