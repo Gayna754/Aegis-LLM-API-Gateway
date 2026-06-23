@@ -20,6 +20,15 @@ Provider port --> Local demo adapter (or an LLM provider adapter)
 Semantic cache write --> response + metrics
 ```
 
+## Features
+
+- **API-key access control** - rejects unauthenticated requests before they reach a provider.
+- **Atomic rate limiting** - Redis Lua script implements a distributed sliding window and returns `429 Too Many Requests` with `Retry-After`.
+- **Semantic caching** - reuses responses for sufficiently similar prompts, with Redis TTL-based expiry.
+- **Cache isolation** - tenant, model, temperature, and system prompt are included in the cache namespace.
+- **Operational endpoints** - `/health` checks Redis connectivity; `/metrics` exposes request outcomes.
+- **Provider adapter** - ships with a deterministic local provider for demos and can be replaced by an OpenAI, Anthropic, or self-hosted adapter.
+
 ## Run with Docker (recommended)
 
 ```bash
@@ -37,26 +46,25 @@ curl -X POST http://localhost:8000/v1/chat/completions \
 
 Repeat it (or use a near-duplicate prompt) and inspect `X-Cache: HIT`. Health and metrics are available at `/health` and `/metrics`.
 
-For local Node development, run `pnpm install`, start Redis locally, then run `pnpm dev`.
+## API
 
-## Design notes worth discussing in an interview
+| Endpoint | Purpose |
+| --- | --- |
+| `POST /v1/chat/completions` | Sends a chat request through the gateway. Requires `X-API-Key`. |
+| `GET /health` | Reports gateway and Redis health. |
+| `GET /metrics` | Exposes cache-hit, cache-miss, and rate-limit counters. |
 
-Redis is used for both stateful concerns. The rate limiter uses a Lua script with a sorted set, keeping check-and-increment atomic across gateway replicas. The semantic cache stores normalized token vectors and cache entries in Redis. For a high-cardinality production corpus, replace the candidate lookup with Redis Stack vector search or pgvector; the gateway contract stays unchanged.
+## Local development
 
-Rate limits count attempts before the cache lookup. That protects the gateway itself from abuse; an alternative policy can charge only provider calls when the product prioritizes cache-friendly usage. The cache never treats similarity alone as authorization: tenant, model, system prompt, and temperature are part of its exact namespace.
+```bash
+pnpm install
+pnpm dev
+```
 
-## Verify
+Set `REDIS_URL` if Redis is not running at `redis://localhost:6379`. The Docker Compose setup already configures this for you.
+
+## Test
 
 ```bash
 pnpm test
 ```
-
-## Resume-ready project entry
-
-**Aegis - LLM API Gateway** | Node.js, Express.js, Redis, Docker, REST APIs
-
-- Built a multi-tenant LLM API gateway with Node.js, Express.js, and Redis, enforcing API-key access and atomic sliding-window rate limits with `429` and `Retry-After` responses.
-- Designed a semantic cache with cosine similarity, Redis TTLs, and request-configuration namespaces to reduce repeated model calls without cross-tenant or stale-response leakage.
-- Containerized the gateway and Redis with Docker Compose; added health checks, request IDs, and metrics endpoints for observable, microservice-ready local deployments.
-
-Only claim measured cache-hit, latency, or cost figures after running the included benchmark against a chosen workload.
