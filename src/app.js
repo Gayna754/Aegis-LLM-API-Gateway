@@ -6,8 +6,22 @@ import { CircuitBreaker } from './circuit-breaker.js';
 export function createApp({ store, provider = localProvider, rateLimit = Number(process.env.DEMO_RATE_LIMIT ?? 60) }) {
   const app = express();
   const breaker = new CircuitBreaker();
-  const metrics = { cache_hit: 0, cache_miss: 0, rate_limited: 0 };
+  const metrics = {
+    cache_hit: 0,
+    cache_miss: 0,
+    rate_limited: 0,
+    requests_total: 0,
+    request_duration_ms_total: 0
+  };
   app.use(express.json({ limit: '100kb' }));
+  app.use((req, res, next) => {
+    const start = process.hrtime.bigint();
+    res.on('finish', () => {
+      metrics.requests_total += 1;
+      metrics.request_duration_ms_total += Number(process.hrtime.bigint() - start) / 1e6;
+    });
+    next();
+  });
   app.use((req, res, next) => {
     res.set('X-Request-ID', crypto.randomUUID());
     next();
@@ -41,7 +55,13 @@ export function createApp({ store, provider = localProvider, rateLimit = Number(
 });
 
   app.get('/metrics', (_req, res) => {
-    res.type('text/plain').send(Object.entries(metrics).map(([name, value]) => `aegis_requests_total{outcome="${name}"} ${value}`).join('\n'));
+    const counters = Object.entries(metrics)
+      .filter(([name]) => !name.endsWith('_ms_total') && name !== 'requests_total');
+    const output = counters
+      .map(([name, value]) => `aegis_requests_total{outcome="${name}"} ${value}`);
+    output.push(`aegis_http_requests_total ${metrics.requests_total}`);
+    output.push(`aegis_http_request_duration_ms_total ${metrics.request_duration_ms_total.toFixed(3)}`);
+    res.type('text/plain').send(output.join('\n') + '\n');
   });
 
   app.post('/v1/chat/completions', async (req, res, next) => {

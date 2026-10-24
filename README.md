@@ -26,7 +26,9 @@ Semantic cache write --> response + metrics
 - **Atomic rate limiting** - Redis Lua script implements a distributed sliding window and returns `429 Too Many Requests` with `Retry-After`.
 - **Semantic caching** - reuses responses for sufficiently similar prompts, with Redis TTL-based expiry.
 - **Cache isolation** - tenant, model, temperature, and system prompt are included in the cache namespace.
-- **Operational endpoints** - `/health` checks Redis connectivity; `/metrics` exposes request outcomes.
+- **Operational health checks** - `/health` reports Redis connectivity and circuit-breaker state.
+- **Observability metrics** - `/metrics` exposes cache outcomes, rate-limit events, total HTTP requests, and cumulative request duration in milliseconds.
+- **Containerized infrastructure** - Docker Compose runs the Node.js gateway and Redis, with a Redis health check and persistent cache storage.
 - **Provider adapter** - ships with a deterministic local provider for demos and can be replaced by an OpenAI, Anthropic, or self-hosted adapter.
 
 ## Run with Docker (recommended)
@@ -63,7 +65,7 @@ Repeat it (or use a near-duplicate prompt) and inspect `X-Cache: HIT`. Health an
 | --- | --- |
 | `POST /v1/chat/completions` | Sends a chat request through the gateway. Requires `X-API-Key`. |
 | `GET /health` | Reports gateway and Redis health. |
-| `GET /metrics` | Exposes cache-hit, cache-miss, and rate-limit counters. |
+| `GET /metrics` | Exposes cache-hit, cache-miss, rate-limit, HTTP request-count, and cumulative request-duration metrics. |
 
 ## Local development
 
@@ -76,6 +78,10 @@ Set `REDIS_URL` if Redis is not running at `redis://localhost:6379`. The Docker 
 
 ## Test
 
+Run the automated test suite:
+
 ```bash
 pnpm test
 ```
+
+Tests cover semantic similarity, cache namespace isolation across generation settings, and the HTTP metrics endpoint.
